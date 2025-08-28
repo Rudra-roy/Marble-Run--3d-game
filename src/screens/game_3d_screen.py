@@ -10,6 +10,15 @@ from OpenGL.GLU import *
 from OpenGL.GLUT import *
 from screens.base_screen import BaseScreen
 
+# Ensure font constants are available
+try:
+    from OpenGL.GLUT import (GLUT_BITMAP_HELVETICA_10, GLUT_BITMAP_HELVETICA_12, 
+                             GLUT_BITMAP_HELVETICA_18, GLUT_BITMAP_TIMES_ROMAN_24,
+                             GLUT_BITMAP_8_BY_13, GLUT_BITMAP_9_BY_15)
+except ImportError:
+    # Fallback if specific constants are not available
+    pass
+
 class Game3DScreen(BaseScreen):
     """Simple 3D game with ball on infinite platform"""
     
@@ -44,12 +53,12 @@ class Game3DScreen(BaseScreen):
         self.gravity = -15.0
         self.ground_friction = 0.85
         self.air_friction = 0.98
-        self.move_speed = 12.0  # Increased from 8.0
-        self.jump_force = 12.0  # Increased from 10.0
+        self.move_speed = 8.0  # Reduced from 12.0
+        self.jump_force = 8.0  # Reduced from 12.0
         
         # Simple physics properties
-        self.max_speed = 15.0  # Maximum movement speed
-        self.acceleration = 25.0  # How fast the ball accelerates
+        self.max_speed = 10.0  # Reduced from 15.0
+        self.acceleration = 18.0  # Reduced from 25.0
         self.bounce_damping = 0.6  # How much energy is lost on bounce
         self.rolling_resistance = 0.02  # Slight resistance when rolling
         
@@ -82,44 +91,44 @@ class Game3DScreen(BaseScreen):
         
         # Platform 2 - moving side to side
         platforms.append({
-            'x': 0, 'y': 0, 'z': -12,
+            'x': 0, 'y': 0, 'z': -8,
             'width': 6, 'height': 0.5, 'depth': 6,
             'color': (0.8, 0.2, 0.2),  # Red
             'movement_type': 'horizontal',
-            'base_x': 0, 'base_y': 0, 'base_z': -12,
+            'base_x': 0, 'base_y': 0, 'base_z': -8,
             'move_range': 4.0,  # How far it moves
             'move_speed': 1.5   # Speed of movement
         })
         
         # Platform 3 - tilting platform
         platforms.append({
-            'x': -5, 'y': 2, 'z': -20,
+            'x': -3, 'y': 1, 'z': -14,
             'width': 4, 'height': 0.5, 'depth': 4,
             'color': (0.2, 0.2, 0.8),  # Blue
             'movement_type': 'tilt',
-            'base_x': -5, 'base_y': 2, 'base_z': -20,
+            'base_x': -3, 'base_y': 1, 'base_z': -14,
             'tilt_angle': 0.0,  # Current tilt angle
             'tilt_speed': 2.0   # Speed of tilting
         })
         
         # Platform 4 - moving back and forth (Z direction)
         platforms.append({
-            'x': 3, 'y': 3, 'z': -28,
+            'x': 2, 'y': 2, 'z': -20,
             'width': 5, 'height': 0.5, 'depth': 5,
             'color': (0.8, 0.8, 0.2),  # Yellow
             'movement_type': 'forward_back',
-            'base_x': 3, 'base_y': 3, 'base_z': -28,
+            'base_x': 2, 'base_y': 2, 'base_z': -20,
             'move_range': 3.0,
             'move_speed': 1.0
         })
         
         # Platform 5 - rotating tilt (more challenging)
         platforms.append({
-            'x': 0, 'y': 5, 'z': -38,
+            'x': 0, 'y': 3, 'z': -26,
             'width': 6, 'height': 0.5, 'depth': 6,
             'color': (0.8, 0.2, 0.8),  # Magenta
             'movement_type': 'rotate_tilt',
-            'base_x': 0, 'base_y': 5, 'base_z': -38,
+            'base_x': 0, 'base_y': 3, 'base_z': -26,
             'tilt_x': 0.0,  # Tilt around X axis
             'tilt_z': 0.0,  # Tilt around Z axis
             'tilt_speed': 1.5
@@ -178,6 +187,10 @@ class Game3DScreen(BaseScreen):
         for platform in self.platforms:
             movement_type = platform.get('movement_type', 'static')
             
+            # Store previous position for velocity calculation
+            prev_x = platform.get('x', 0)
+            prev_z = platform.get('z', 0)
+            
             if movement_type == 'horizontal':
                 # Move side to side
                 move_range = platform['move_range']
@@ -186,6 +199,10 @@ class Game3DScreen(BaseScreen):
                 
                 offset = math.sin(current_time * move_speed) * move_range
                 platform['x'] = base_x + offset
+                
+                # Calculate velocity
+                platform['vel_x'] = (platform['x'] - prev_x) / dt if dt > 0 else 0
+                platform['vel_z'] = 0
                 
             elif movement_type == 'forward_back':
                 # Move forward and back
@@ -196,16 +213,28 @@ class Game3DScreen(BaseScreen):
                 offset = math.sin(current_time * move_speed) * move_range
                 platform['z'] = base_z + offset
                 
+                # Calculate velocity
+                platform['vel_x'] = 0
+                platform['vel_z'] = (platform['z'] - prev_z) / dt if dt > 0 else 0
+                
             elif movement_type == 'tilt':
                 # Tilt back and forth
                 tilt_speed = platform['tilt_speed']
                 platform['tilt_angle'] = math.sin(current_time * tilt_speed) * 0.3  # Max 0.3 radians (about 17 degrees)
+                platform['vel_x'] = 0
+                platform['vel_z'] = 0
                 
             elif movement_type == 'rotate_tilt':
                 # Complex tilting in multiple directions
                 tilt_speed = platform['tilt_speed']
                 platform['tilt_x'] = math.sin(current_time * tilt_speed) * 0.25
                 platform['tilt_z'] = math.cos(current_time * tilt_speed * 0.7) * 0.25
+                platform['vel_x'] = 0
+                platform['vel_z'] = 0
+            else:
+                # Static platform
+                platform['vel_x'] = 0
+                platform['vel_z'] = 0
         
     def _handle_input(self, dt):
         """Handle player input with acceleration"""
@@ -266,6 +295,9 @@ class Game3DScreen(BaseScreen):
         
         # Platform collision
         self._handle_platform_collision()
+        
+        # Apply platform movement to ball if on a moving platform
+        self._apply_platform_movement(dt)
         
         # Update score based on platform reached
         self._update_score()
@@ -357,6 +389,35 @@ class Game3DScreen(BaseScreen):
                         
                         print(f"All platforms completed! +{completion_bonus} bonus points!")
                         print(f"Final Score: {self.score} | Time: {completion_time:.1f}s")
+        
+    def _apply_platform_movement(self, dt):
+        """Apply platform movement to ball when standing on a moving platform"""
+        if not self._is_on_ground():
+            return
+            
+        # Find which platform the ball is on
+        for platform in self.platforms:
+            px, py, pz = platform['x'], platform['y'], platform['z']
+            pw, ph, pd = platform['width'], platform['height'], platform['depth']
+            
+            # Check if ball is on this platform
+            if (px - pw/2 <= self.ball_x <= px + pw/2 and
+                pz - pd/2 <= self.ball_z <= pz + pd/2):
+                
+                # Check if ball is on top of platform
+                platform_top = py + ph/2
+                ball_bottom = self.ball_y - self.ball_radius
+                
+                if abs(ball_bottom - platform_top) < 0.1:
+                    # Apply platform velocity to ball
+                    platform_vel_x = platform.get('vel_x', 0)
+                    platform_vel_z = platform.get('vel_z', 0)
+                    
+                    # Move ball with platform (with some resistance to feel natural)
+                    self.ball_x += platform_vel_x * dt * 0.8  # 80% coupling
+                    self.ball_z += platform_vel_z * dt * 0.8
+                    
+                    return  # Only apply movement from one platform
         
     def _update_camera(self):
         """Update camera to follow the ball"""
@@ -499,19 +560,20 @@ class Game3DScreen(BaseScreen):
         
     def _draw_score_card(self, window_width, window_height):
         """Draw a score card with score, timer, and stats"""
-        # Disable depth testing for UI
+        # Disable depth testing and lighting for UI
         glDisable(GL_DEPTH_TEST)
+        glDisable(GL_LIGHTING)
         
         # Score card background
-        card_width = 200
-        card_height = 120
+        card_width = 220
+        card_height = 100
         card_x = window_width - card_width - 20
         card_y = window_height - card_height - 20
         
         # Draw semi-transparent background
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        glColor4f(0.0, 0.0, 0.0, 0.7)  # Semi-transparent black
+        glColor4f(0.0, 0.0, 0.0, 0.8)  # Semi-transparent black
         glBegin(GL_QUADS)
         glVertex2f(card_x, card_y)
         glVertex2f(card_x + card_width, card_y)
@@ -520,6 +582,7 @@ class Game3DScreen(BaseScreen):
         glEnd()
         
         # Draw border
+        glDisable(GL_BLEND)
         glColor3f(1.0, 1.0, 1.0)
         glLineWidth(2.0)
         glBegin(GL_LINE_LOOP)
@@ -528,9 +591,8 @@ class Game3DScreen(BaseScreen):
         glVertex2f(card_x + card_width, card_y + card_height)
         glVertex2f(card_x, card_y + card_height)
         glEnd()
-        glDisable(GL_BLEND)
         
-        # Text content
+        # Text content using simple fonts
         text_x = card_x + 10
         text_y = card_y + card_height - 20
         
@@ -539,40 +601,38 @@ class Game3DScreen(BaseScreen):
         score_text = f"SCORE: {self.score}"
         glRasterPos2f(text_x, text_y)
         for char in score_text:
-            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, ord(char))
         
         # Timer
-        text_y -= 25
+        text_y -= 20
         glColor3f(0.0, 1.0, 1.0)  # Cyan
         timer_text = f"TIME: {self.game_time:.1f}s"
         glRasterPos2f(text_x, text_y)
         for char in timer_text:
-            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
-        
-        # Platform progress
-        text_y -= 25
-        glColor3f(0.0, 1.0, 0.0)  # Green
-        platform_text = f"PLATFORM: {len(self.platforms_reached)}/{len(self.platforms)}"
-        glRasterPos2f(text_x, text_y)
-        for char in platform_text:
             glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, ord(char))
         
+        # Platform progress
+        text_y -= 20
+        glColor3f(0.0, 1.0, 0.0)  # Green
+        platform_text = f"PLATFORMS: {len(self.platforms_reached)}/{len(self.platforms)}"
+        glRasterPos2f(text_x, text_y)
+        for char in platform_text:
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_10, ord(char))
+        
         # High score and best time (if available)
-        if self.high_score > 0:
-            text_y -= 20
+        if self.high_score > 0 or self.best_time < float('inf'):
+            text_y -= 15
             glColor3f(1.0, 0.5, 0.0)  # Orange
-            high_score_text = f"HIGH: {self.high_score}"
+            stats_text = f"HIGH: {self.high_score}"
+            if self.best_time < float('inf'):
+                stats_text += f" | BEST: {self.best_time:.1f}s"
             glRasterPos2f(text_x, text_y)
-            for char in high_score_text:
-                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_10, ord(char))
+            for char in stats_text:
+                glutBitmapCharacter(GLUT_BITMAP_8_BY_13, ord(char))
         
-        if self.best_time < float('inf'):
-            best_time_text = f" | BEST: {self.best_time:.1f}s"
-            for char in best_time_text:
-                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_10, ord(char))
-        
-        # Restore depth testing
+        # Restore OpenGL state
         glEnable(GL_DEPTH_TEST)
+        glEnable(GL_LIGHTING)
         
     def _render_ui(self):
         """Render UI elements"""
