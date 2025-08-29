@@ -68,6 +68,11 @@ class GameEngine:
         glutKeyboardFunc(self.input_handler.keyboard)
         glutKeyboardUpFunc(self.input_handler.keyboard_up)
         glutSpecialFunc(self.input_handler.special_keys)
+        try:
+            # Register special key release if available
+            glutSpecialUpFunc(self.input_handler.special_keys_up)
+        except Exception:
+            pass
         glutTimerFunc(0, self.timer, 0)
         
         print("Marble Run initialized successfully!")

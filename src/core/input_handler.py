@@ -61,12 +61,35 @@ class InputHandler:
         """Handle special keys (arrows)"""
         current_state = self.state_manager.get_current_state()
         
+        if current_state == GAME_3D:
+            screen = self.state_manager.screens.get(GAME_3D)
+            if screen:
+                # Forward arrow key presses to game screen (Player 2 controls)
+                try:
+                    screen.handle_special_key_press(key)
+                except Exception:
+                    pass
+            return
+        
         if current_state == MAIN_MENU:
             self._handle_main_menu_navigation(key)
         elif current_state == OPTIONS_MENU:
             self._handle_options_menu_navigation(key)
         elif current_state == GAME_MODE_SELECTION:
             self._handle_game_mode_navigation(key)
+
+    def special_keys_up(self, key, x, y):
+        """Handle special keys release (arrows)"""
+        current_state = self.state_manager.get_current_state()
+        
+        if current_state == GAME_3D:
+            screen = self.state_manager.screens.get(GAME_3D)
+            if screen:
+                try:
+                    screen.handle_special_key_release(key)
+                except Exception:
+                    pass
+            return
     
     def _handle_escape_key(self, current_state):
         """Handle ESC key for different states"""

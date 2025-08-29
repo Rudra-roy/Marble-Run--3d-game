@@ -9,6 +9,7 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GLUT import *
 from screens.base_screen import BaseScreen
+from core.settings import game_settings
 
 # Ensure font constants are available
 try:
@@ -25,6 +26,9 @@ class Game3DScreen(BaseScreen):
     def __init__(self, state_manager, opengl_manager, input_handler):
         super().__init__(state_manager, opengl_manager, input_handler)
         
+        # Mode selection
+        self.is_multiplayer = (game_settings.get_game_mode() == 1)
+
         # Ball properties
         self.ball_x = 0.0
         self.ball_y = 1.0  # Start above the platform
@@ -34,11 +38,22 @@ class Game3DScreen(BaseScreen):
         self.ball_vel_z = 0.0
         self.ball_radius = 0.5
         
+        # Player 2 properties
+        self.ball2_x = 0.0
+        self.ball2_y = 1.0
+        self.ball2_z = 0.0
+        self.ball2_vel_x = 0.0
+        self.ball2_vel_y = 0.0
+        self.ball2_vel_z = 0.0
+        self.ball2_radius = 0.5
+        
         # Platform properties - Fall Guys style platforms
         self.platforms = self._create_platforms()
         
         # Game state
         self.game_over = False
+        self.game_over_p1 = False
+        self.game_over_p2 = False
         self.death_y = -20.0  # If ball falls below this, game over
         
         # Score and timer system
@@ -48,6 +63,12 @@ class Game3DScreen(BaseScreen):
         self.game_time = 0.0
         self.best_time = float('inf')  # Best completion time
         self.high_score = 0  # Highest score achieved
+        
+        # Player 2 scoring
+        self.score_p2 = 0
+        self.platforms_reached_p2 = set()
+        self.best_time_p2 = float('inf')
+        self.high_score_p2 = 0
         
         # Physics constants
         self.gravity = -15.0
@@ -70,6 +91,11 @@ class Game3DScreen(BaseScreen):
         self.keys_pressed = {
             'w': False, 'a': False, 's': False, 'd': False,
             ' ': False  # Spacebar for jumping
+        }
+        # Player 2 keys (arrow keys + Enter)
+        self.keys_pressed_p2 = {
+            'up': False, 'down': False, 'left': False, 'right': False,
+            'enter': False
         }
         
         # Timing
@@ -144,6 +170,9 @@ class Game3DScreen(BaseScreen):
             if self.game_over:
                 print("Resetting game state after returning from menu...")
                 self.reset_game_state()
+        
+        # Ensure mode reflects latest selection (Single vs Two Player)
+        self.is_multiplayer = (game_settings.get_game_mode() == 1)
             
         current_time = time.time()
         dt = min(current_time - self.last_time, 0.1)  # Cap delta time
@@ -152,33 +181,58 @@ class Game3DScreen(BaseScreen):
         # Update game logic
         self._update_game(dt)
         
-        # Setup 3D rendering
-        self.opengl_manager.setup_3d_projection()
-        self._setup_lighting()
-        
         # Clear background
         glClearColor(0.3, 0.6, 1.0, 1.0)  # Sky blue
         
-        # Update camera to follow ball
-        self._update_camera()
+        if not self.is_multiplayer:
+            # Single player rendering path
+            self.opengl_manager.setup_3d_projection()
+            self._setup_lighting()
+            self._update_camera()
+            self._render_scene()
+            self.opengl_manager.setup_2d_projection()
+            self._render_ui()
+            return
         
-        # Render game objects
-        self._render_scene()
+        # Multiplayer split screen
+        window_width = glutGet(GLUT_WINDOW_WIDTH)
+        window_height = glutGet(GLUT_WINDOW_HEIGHT)
+        half_width = max(1, window_width // 2)
         
-        # Render UI overlays in 2D
-        self.opengl_manager.setup_2d_projection()
-        self._render_ui()
+        # Left viewport (P1)
+        glViewport(0, 0, half_width, window_height)
+        self._setup_perspective_for_viewport(half_width, window_height)
+        self._setup_lighting()
+        self._update_camera_for_player(1)
+        self._render_scene_for_player(1)
+        self._render_ui_for_player(1, half_width, window_height)
+        
+        # Clear depth buffer before rendering the second viewport
+        glClear(GL_DEPTH_BUFFER_BIT)
+        
+        # Right viewport (P2)
+        glViewport(half_width, 0, window_width - half_width, window_height)
+        self._setup_perspective_for_viewport(window_width - half_width, window_height)
+        self._setup_lighting()
+        self._update_camera_for_player(2)
+        self._render_scene_for_player(2)
+        self._render_ui_for_player(2, window_width - half_width, window_height)
         
     def _update_game(self, dt):
         """Update game physics and logic"""
         # Update platform movements
         self._update_platform_movements(dt)
         
-        # Handle input
-        self._handle_input(dt)
+        if not self.is_multiplayer:
+            self._handle_input(dt)
+            self._update_physics(dt)
+            return
         
-        # Apply physics
+        # Multiplayer: update both players
+        self._handle_input(dt)
+        self._handle_input_p2(dt)
         self._update_physics(dt)
+        self._update_physics_p2(dt)
         
     def _update_platform_movements(self, dt):
         """Update moving and tilting platforms"""
@@ -258,6 +312,28 @@ class Game3DScreen(BaseScreen):
         # Jumping
         if self.keys_pressed[' '] and self._is_on_ground():
             self.ball_vel_y = self.jump_force
+    
+    def _handle_input_p2(self, dt):
+        """Handle Player 2 input with acceleration"""
+        if not self.is_multiplayer:
+            return
+        if self.keys_pressed_p2['up']:
+            self.ball2_vel_z -= self.acceleration * dt
+        if self.keys_pressed_p2['down']:
+            self.ball2_vel_z += self.acceleration * dt
+        if self.keys_pressed_p2['left']:
+            self.ball2_vel_x -= self.acceleration * dt
+        if self.keys_pressed_p2['right']:
+            self.ball2_vel_x += self.acceleration * dt
+        
+        horizontal_speed = math.sqrt(self.ball2_vel_x**2 + self.ball2_vel_z**2)
+        if horizontal_speed > self.max_speed:
+            scale = self.max_speed / horizontal_speed
+            self.ball2_vel_x *= scale
+            self.ball2_vel_z *= scale
+        
+        if self.keys_pressed_p2['enter'] and self._is_on_ground_p2():
+            self.ball2_vel_y = self.jump_force
             
     def _update_physics(self, dt):
         """Update ball physics with enhanced properties"""
@@ -305,11 +381,47 @@ class Game3DScreen(BaseScreen):
         # Check for death (falling off platforms)
         if self.ball_y < self.death_y:
             self.game_over = True
+            self.game_over_p1 = True
             # Update high score if needed
             if self.score > self.high_score:
                 self.high_score = self.score
                 print(f"New High Score: {self.high_score}!")
             print("Game Over! Ball fell off the platforms!")
+
+    def _update_physics_p2(self, dt):
+        """Update Player 2 physics"""
+        if not self.is_multiplayer or self.game_over_p2:
+            return
+        
+        self.game_time = time.time() - self.start_time
+        self.ball2_vel_y += self.gravity * dt
+        if self._is_on_ground_p2():
+            self.ball2_vel_x *= self.ground_friction
+            self.ball2_vel_z *= self.ground_friction
+            speed = math.sqrt(self.ball2_vel_x**2 + self.ball2_vel_z**2)
+            if speed > 0:
+                resistance_force = self.rolling_resistance * dt
+                resistance_scale = max(0, 1 - resistance_force / speed)
+                self.ball2_vel_x *= resistance_scale
+                self.ball2_vel_z *= resistance_scale
+        else:
+            self.ball2_vel_x *= self.air_friction
+            self.ball2_vel_z *= self.air_friction
+        
+        self.ball2_x += self.ball2_vel_x * dt
+        self.ball2_y += self.ball2_vel_y * dt
+        self.ball2_z += self.ball2_vel_z * dt
+        
+        self._handle_platform_collision_p2()
+        self._apply_platform_movement_p2(dt)
+        self._update_score_p2()
+        
+        if self.ball2_y < self.death_y:
+            self.game_over_p2 = True
+            if self.score_p2 > self.high_score_p2:
+                self.high_score_p2 = self.score_p2
+                print(f"P2 New High Score: {self.high_score_p2}!")
+            print("P2 Game Over! Ball fell off the platforms!")
             
     def _handle_platform_collision(self):
         """Handle collision with platforms with bounce physics"""
@@ -339,6 +451,25 @@ class Game3DScreen(BaseScreen):
                         self.ball_vel_y = 0
                     
                     return  # Stop checking other platforms
+    
+    def _handle_platform_collision_p2(self):
+        """Handle collision for P2 with bounce physics"""
+        for platform in self.platforms:
+            px, py, pz = platform['x'], platform['y'], platform['z']
+            pw, ph, pd = platform['width'], platform['height'], platform['depth']
+            if (px - pw/2 <= self.ball2_x <= px + pw/2 and
+                pz - pd/2 <= self.ball2_z <= pz + pd/2):
+                platform_top = py + ph/2
+                ball_bottom = self.ball2_y - self.ball2_radius
+                if (ball_bottom <= platform_top and
+                    ball_bottom >= platform_top - 1.0 and
+                    self.ball2_vel_y <= 0):
+                    self.ball2_y = platform_top + self.ball2_radius
+                    if self.ball2_vel_y < -2.0:
+                        self.ball2_vel_y = -self.ball2_vel_y * self.bounce_damping
+                    else:
+                        self.ball2_vel_y = 0
+                    return
                 
     def _is_on_ground(self):
         """Check if ball is on any platform"""
@@ -354,6 +485,19 @@ class Game3DScreen(BaseScreen):
                 platform_top = py + ph/2
                 ball_bottom = self.ball_y - self.ball_radius
                 
+                if abs(ball_bottom - platform_top) < 0.1:
+                    return True
+        return False
+    
+    def _is_on_ground_p2(self):
+        """Check if P2 ball is on any platform"""
+        for platform in self.platforms:
+            px, py, pz = platform['x'], platform['y'], platform['z']
+            pw, ph, pd = platform['width'], platform['height'], platform['depth']
+            if (px - pw/2 <= self.ball2_x <= px + pw/2 and
+                pz - pd/2 <= self.ball2_z <= pz + pd/2):
+                platform_top = py + ph/2
+                ball_bottom = self.ball2_y - self.ball2_radius
                 if abs(ball_bottom - platform_top) < 0.1:
                     return True
         return False
@@ -389,6 +533,29 @@ class Game3DScreen(BaseScreen):
                         
                         print(f"All platforms completed! +{completion_bonus} bonus points!")
                         print(f"Final Score: {self.score} | Time: {completion_time:.1f}s")
+    
+    def _update_score_p2(self):
+        """Update P2 score based on platforms reached"""
+        for i, platform in enumerate(self.platforms):
+            px, py, pz = platform['x'], platform['y'], platform['z']
+            pw, ph, pd = platform['width'], platform['height'], platform['depth']
+            if (px - pw/2 <= self.ball2_x <= px + pw/2 and
+                pz - pd/2 <= self.ball2_z <= pz + pd/2 and
+                self._is_on_ground_p2()):
+                if i not in self.platforms_reached_p2:
+                    self.platforms_reached_p2.add(i)
+                    points = (i + 1) * 100
+                    self.score_p2 += points
+                    print(f"[P2] Platform {i+1} reached! +{points} points (Total: {self.score_p2})")
+                    if len(self.platforms_reached_p2) == len(self.platforms):
+                        completion_bonus = 1000
+                        self.score_p2 += completion_bonus
+                        completion_time = self.game_time
+                        if completion_time < self.best_time_p2:
+                            self.best_time_p2 = completion_time
+                            print(f"[P2] New Best Time: {self.best_time_p2:.1f}s!")
+                        print(f"[P2] All platforms completed! +{completion_bonus} bonus points!")
+                        print(f"[P2] Final Score: {self.score_p2} | Time: {completion_time:.1f}s")
         
     def _apply_platform_movement(self, dt):
         """Apply platform movement to ball when standing on a moving platform"""
@@ -418,6 +585,24 @@ class Game3DScreen(BaseScreen):
                     self.ball_z += platform_vel_z * dt * 0.8
                     
                     return  # Only apply movement from one platform
+    
+    def _apply_platform_movement_p2(self, dt):
+        """Apply platform movement to P2 ball"""
+        if not self._is_on_ground_p2():
+            return
+        for platform in self.platforms:
+            px, py, pz = platform['x'], platform['y'], platform['z']
+            pw, ph, pd = platform['width'], platform['height'], platform['depth']
+            if (px - pw/2 <= self.ball2_x <= px + pw/2 and
+                pz - pd/2 <= self.ball2_z <= pz + pd/2):
+                platform_top = py + ph/2
+                ball_bottom = self.ball2_y - self.ball2_radius
+                if abs(ball_bottom - platform_top) < 0.1:
+                    platform_vel_x = platform.get('vel_x', 0)
+                    platform_vel_z = platform.get('vel_z', 0)
+                    self.ball2_x += platform_vel_x * dt * 0.8
+                    self.ball2_z += platform_vel_z * dt * 0.8
+                    return
         
     def _update_camera(self):
         """Update camera to follow the ball"""
@@ -454,6 +639,46 @@ class Game3DScreen(BaseScreen):
         
         # Draw the ball
         self._draw_ball()
+
+    def _render_scene_for_player(self, player_index):
+        """Render scene for specified player (platforms + that player's ball)"""
+        self._draw_platform()
+        if player_index == 1:
+            self._draw_ball()
+        else:
+            glPushMatrix()
+            glTranslatef(self.ball2_x, self.ball2_y, self.ball2_z)
+            glMaterialfv(GL_FRONT, GL_AMBIENT, [0.8, 0.2, 0.2, 1.0])
+            glMaterialfv(GL_FRONT, GL_DIFFUSE, [1.0, 0.4, 0.4, 1.0])
+            glMaterialfv(GL_FRONT, GL_SPECULAR, [1.0, 0.8, 0.8, 1.0])
+            glMaterialf(GL_FRONT, GL_SHININESS, 50.0)
+            quadric = gluNewQuadric()
+            gluSphere(quadric, self.ball2_radius, 20, 20)
+            gluDeleteQuadric(quadric)
+            glPopMatrix()
+
+    def _setup_perspective_for_viewport(self, width, height):
+        """Set perspective according to viewport size"""
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        aspect = float(max(1, width)) / float(max(1, height))
+        gluPerspective(45, aspect, 0.1, 1000.0)
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+
+    def _update_camera_for_player(self, player_index):
+        """Update camera for specific player"""
+        glLoadIdentity()
+        if player_index == 1:
+            cx, cy, cz = self.ball_x, self.ball_y, self.ball_z
+        else:
+            cx, cy, cz = self.ball2_x, self.ball2_y, self.ball2_z
+        camera_x = cx
+        camera_y = cy + self.camera_height
+        camera_z = cz + self.camera_distance
+        gluLookAt(camera_x, camera_y, camera_z,
+                  cx, cy, cz,
+                  0, 1, 0)
         
     def _draw_platform(self):
         """Draw Fall Guys style platforms with movement and tilting"""
@@ -675,6 +900,59 @@ class Game3DScreen(BaseScreen):
             glRasterPos2f(20, window_height - 60)
             for char in vel_text:
                 glutBitmapCharacter(GLUT_BITMAP_HELVETICA_10, ord(char))
+
+    def _render_ui_for_player(self, player_index, vp_width, vp_height):
+        """Render per-player UI for current viewport"""
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        glOrtho(0, vp_width, vp_height, 0, -1, 1)
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+        glDisable(GL_LIGHTING)
+        glDisable(GL_DEPTH_TEST)
+        
+        if player_index == 1:
+            score = self.score
+            over = self.game_over_p1
+            vx, vy, vz = self.ball_vel_x, self.ball_vel_y, self.ball_vel_z
+            bx, by, bz = self.ball_x, self.ball_y, self.ball_z
+            controls = "P1: WASD move, SPACE jump"
+        else:
+            score = self.score_p2
+            over = self.game_over_p2
+            vx, vy, vz = self.ball2_vel_x, self.ball2_vel_y, self.ball2_vel_z
+            bx, by, bz = self.ball2_x, self.ball2_y, self.ball2_z
+            controls = "P2: Arrows move, ENTER jump"
+        
+        if over:
+            glColor3f(1.0, 0.0, 0.0)
+            text = "GAME OVER"
+            glRasterPos2f(vp_width//2 - 50, vp_height//2)
+            for ch in text:
+                glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, ord(ch))
+        else:
+            glColor3f(1.0, 1.0, 0.0)
+            s = f"SCORE: {score}"
+            glRasterPos2f(10, 20)
+            for ch in s:
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, ord(ch))
+            glColor3f(1.0, 1.0, 1.0)
+            glRasterPos2f(10, 40)
+            for ch in controls:
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, ord(ch))
+            glColor3f(0.8, 0.9, 1.0)
+            pos = f"Pos X={bx:.1f} Y={by:.1f} Z={bz:.1f}"
+            glRasterPos2f(10, 60)
+            for ch in pos:
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, ord(ch))
+            speed = math.sqrt(vx*vx + vz*vz)
+            vel = f"Speed {speed:.1f} | Vx={vx:.1f} Vy={vy:.1f} Vz={vz:.1f}"
+            glRasterPos2f(10, 80)
+            for ch in vel:
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_10, ord(ch))
+        
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_LIGHTING)
             
     def handle_key_press(self, key):
         """Handle key press events"""
@@ -687,12 +965,46 @@ class Game3DScreen(BaseScreen):
             
         if key in self.keys_pressed and not self.game_over:
             self.keys_pressed[key] = True
+        
+        # P2 jump via Enter
+        if self.is_multiplayer and not self.game_over_p2:
+            if key == '\r':
+                self.keys_pressed_p2['enter'] = True
             
     def handle_key_release(self, key):
         """Handle key release events"""
         key = key.lower()
         if key in self.keys_pressed and not self.game_over:
             self.keys_pressed[key] = False
+        if self.is_multiplayer:
+            if key == '\r':
+                self.keys_pressed_p2['enter'] = False
+
+    def handle_special_key_press(self, key):
+        """Handle Arrow keys for P2"""
+        if not self.is_multiplayer or self.game_over_p2:
+            return
+        if key == GLUT_KEY_UP:
+            self.keys_pressed_p2['up'] = True
+        elif key == GLUT_KEY_DOWN:
+            self.keys_pressed_p2['down'] = True
+        elif key == GLUT_KEY_LEFT:
+            self.keys_pressed_p2['left'] = True
+        elif key == GLUT_KEY_RIGHT:
+            self.keys_pressed_p2['right'] = True
+    
+    def handle_special_key_release(self, key):
+        """Handle Arrow key releases for P2"""
+        if not self.is_multiplayer:
+            return
+        if key == GLUT_KEY_UP:
+            self.keys_pressed_p2['up'] = False
+        elif key == GLUT_KEY_DOWN:
+            self.keys_pressed_p2['down'] = False
+        elif key == GLUT_KEY_LEFT:
+            self.keys_pressed_p2['left'] = False
+        elif key == GLUT_KEY_RIGHT:
+            self.keys_pressed_p2['right'] = False
             
     def _restart_game(self):
         """Restart the game"""
@@ -716,7 +1028,8 @@ class Game3DScreen(BaseScreen):
         
     def on_screen_enter(self):
         """Called when this screen becomes active"""
-        # Reset the game state when entering the screen
+        # Sync mode with current selection and reset when coming in
+        self.is_multiplayer = (game_settings.get_game_mode() == 1)
         if self.game_over:
             self.reset_game_state()
             
