@@ -6,19 +6,17 @@ A 3D OpenGL-based platformer game inspired by Fall Guys, built with Python and P
 
 Marble Run is a Fall Guys-inspired 3D platformer where you control a ball through a series of challenging platforms. Each platform presents unique obstacles:
 
-- **Static Platform**: Safe starting area (Green)
-- **Moving Platform**: Slides side-to-side (Red) 
-- **Tilting Platform**: Rocks back and forth (Blue)
-- **Forward-Back Platform**: Moves in Z-direction (Yellow)
-- **Rotating Tilt Platform**: Complex multi-axis tilting (Magenta)
+- **30 Platforms (Single Player)**: Progressive difficulty with varied challenges
+- **20 Platforms (Multiplayer)**: Faster-paced competitive matches
+- **Dynamic Movement**: Platforms move using sine/cosine functions
+- **Variety of Challenges**: Static, moving, tilting, and rotating platforms
+- **Increasing Difficulty**: Platform size decreases and movement speed increases
 
 ### 🏆 Scoring System
-- **100 points** for reaching Platform 1
-- **200 points** for reaching Platform 2  
-- **300 points** for reaching Platform 3
-- **400 points** for reaching Platform 4
-- **500 points** for reaching Platform 5
-- **1000 bonus points** for completing all platforms
+- **Progressive Points**: 100 × platform number (Platform 1 = 100pts, Platform 2 = 200pts, etc.)
+- **Single Player**: 30 challenging platforms to complete
+- **Multiplayer**: 20 platforms for faster-paced VS matches
+- **Completion Bonus**: 1000 bonus points for finishing all platforms
 - **Timer tracking** for best completion times
 - **High score tracking** across sessions
 
@@ -40,10 +38,11 @@ Marble Run is a Fall Guys-inspired 3D platformer where you control a ball throug
 ### UI System
 - **Loading Screen**: Animated loading with progress indicator
 - **Main Menu**: Keyboard-navigable menu system
-- **Options Menu**: Sound volume, text size, and difficulty settings
+- **High Score Display**: Session-based high score tracking
 - **Game Mode Selection**: Single/multiplayer mode selection
 - **In-Game HUD**: Score card, controls, position/velocity display
 - **Game Over Screen**: Restart options and statistics
+- **Split-Screen Multiplayer**: VS mode with visible divider and winner determination
 
 ## 📁 Project Structure
 
@@ -64,7 +63,7 @@ Marble-Run--3d-game/
 │   │   ├── base_screen.py    # Base screen interface
 │   │   ├── loading_screen.py # Loading screen with animations
 │   │   ├── main_menu_screen.py         # Main menu
-│   │   ├── options_menu_screen.py      # Settings menu
+│   │   ├── highscore_screen.py         # High score display
 │   │   ├── game_mode_selection_screen.py # Mode selection
 │   │   └── game_3d_screen.py # Main 3D game (PRIMARY GAMEPLAY)
 │   ├── ui/                   # UI rendering utilities
@@ -88,6 +87,33 @@ Marble-Run--3d-game/
 - **Spacebar**: Jump (only when on ground)
 - **R**: Restart game (when game over)
 - **Escape**: Return to main menu
+
+### Multiplayer Controls
+- **Player 1**: WASD + Spacebar (same as single player)
+- **Player 2**: Arrow Keys + Enter for jump
+
+## 🎮 Multiplayer VS Mode
+
+The game features a competitive VS mode where two players race through the platforms simultaneously:
+
+### Features
+- **Split-Screen Display**: Screen divided with visible divider line and "VS" indicator
+- **Independent Player Physics**: Each player has their own ball and physics state
+- **Real-Time Score Tracking**: Both players' scores displayed in their respective viewports
+- **Immediate Winner Determination**: Game ends when any player falls
+
+### VS Game Rules
+- **Game End Condition**: When one player falls off the platforms
+- **Winner Logic**: 
+  - If falling player has **more than 100 points lead**: Falling player wins
+  - If score difference is **100 or less**: Remaining player wins
+- **Visual Feedback**: Clear "YOU WIN!" / "YOU LOSE" messages with winner reasoning
+
+### Technical Implementation
+- **Viewport Splitting**: OpenGL viewport division for true split-screen rendering
+- **Dual Camera System**: Independent camera tracking for each player
+- **Synchronized Platform Movement**: Both players experience the same platform behaviors
+- **Separate Input Handling**: Simultaneous input processing for both players
 
 ## 🛠️ Technical Implementation
 
@@ -259,7 +285,7 @@ The game is tuned for:
 ### Planned Features
 - **Multiple Levels**: Additional platform courses
 - **Power-ups**: Temporary abilities (higher jump, slower platforms)
-- **Multiplayer**: Race against other players
+- **Online Multiplayer**: Internet-based competitive play
 - **Leaderboards**: Online score comparison
 - **Custom Levels**: Level editor and sharing
 - **Audio System**: Sound effects and background music

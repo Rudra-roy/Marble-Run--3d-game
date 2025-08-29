@@ -8,7 +8,7 @@ from OpenGL.GLUT import *
 # Game states
 LOADING_SCREEN = 0
 MAIN_MENU = 1
-OPTIONS_MENU = 2
+HIGH_SCORE = 2
 GAME_MODE_SELECTION = 3
 GAME_3D = 4
 
@@ -17,6 +17,7 @@ class StateManager:
     
     def __init__(self):
         self.current_state = LOADING_SCREEN
+        self.previous_state = None
         self.loading_start_time = 0
         
         # Transition system
@@ -42,10 +43,23 @@ class StateManager:
     
     def start_transition(self, new_state, direction=1):
         """Start a smooth transition between states"""
+        # Call screen exit callback for previous state
+        if self.current_state in self.screens:
+            screen = self.screens[self.current_state]
+            if hasattr(screen, 'on_screen_exit'):
+                screen.on_screen_exit()
+        
+        self.previous_state = self.current_state
         self.transitioning = True
         self.transition_direction = direction
         self.menu_transition_time = time.time()
         self.current_state = new_state
+        
+        # Call screen enter callback for new state
+        if self.current_state in self.screens:
+            screen = self.screens[self.current_state]
+            if hasattr(screen, 'on_screen_enter'):
+                screen.on_screen_enter()
     
     def update(self):
         """Update state logic"""

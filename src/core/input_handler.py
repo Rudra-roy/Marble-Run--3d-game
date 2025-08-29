@@ -4,7 +4,7 @@ Input handling system for keyboard and special keys.
 
 import sys
 from OpenGL.GLUT import *
-from core.state_manager import MAIN_MENU, OPTIONS_MENU, GAME_MODE_SELECTION, GAME_3D
+from core.state_manager import MAIN_MENU, HIGH_SCORE, GAME_MODE_SELECTION, GAME_3D
 from core.settings import game_settings
 
 class InputHandler:
@@ -14,7 +14,7 @@ class InputHandler:
         self.state_manager = state_manager
         self.menu_selections = {
             MAIN_MENU: 0,
-            OPTIONS_MENU: 0,
+            HIGH_SCORE: 0,
             GAME_MODE_SELECTION: 0
         }
     
@@ -73,8 +73,8 @@ class InputHandler:
         
         if current_state == MAIN_MENU:
             self._handle_main_menu_navigation(key)
-        elif current_state == OPTIONS_MENU:
-            self._handle_options_menu_navigation(key)
+        elif current_state == HIGH_SCORE:
+            self._handle_highscore_menu_navigation(key)
         elif current_state == GAME_MODE_SELECTION:
             self._handle_game_mode_navigation(key)
 
@@ -96,7 +96,7 @@ class InputHandler:
         if current_state == GAME_3D:
             self._play_sound_effect("menu_back")
             self.state_manager.start_transition(MAIN_MENU, -1)
-        elif current_state == OPTIONS_MENU:
+        elif current_state == HIGH_SCORE:
             self._play_sound_effect("menu_back")
             self.state_manager.start_transition(MAIN_MENU, -1)
         elif current_state == GAME_MODE_SELECTION:
@@ -110,8 +110,8 @@ class InputHandler:
         """Handle Enter key for different states"""
         if current_state == MAIN_MENU:
             self._handle_main_menu_enter()
-        elif current_state == OPTIONS_MENU:
-            self._handle_options_menu_enter()
+        elif current_state == HIGH_SCORE:
+            pass  # High score screen has no interactive elements
         elif current_state == GAME_MODE_SELECTION:
             self._handle_game_mode_enter()
     
@@ -123,22 +123,12 @@ class InputHandler:
         if selection == 0:  # Start Game
             self.state_manager.start_transition(GAME_MODE_SELECTION)
             print("Selecting game mode...")
-        elif selection == 1:  # Options
-            self.state_manager.start_transition(OPTIONS_MENU)
-            self.menu_selections[OPTIONS_MENU] = 0
+        elif selection == 1:  # High Score
+            self.state_manager.start_transition(HIGH_SCORE)
+            self.menu_selections[HIGH_SCORE] = 0
         elif selection == 2:  # Quit
             print("Thanks for playing Marble Run!")
             self._safe_exit()
-    
-    def _handle_options_menu_enter(self):
-        """Handle Enter key in options menu"""
-        selection = self.menu_selections[OPTIONS_MENU]
-        
-        if selection == 3:  # Back to Main Menu
-            self._play_sound_effect("menu_back")
-            self.state_manager.start_transition(MAIN_MENU, -1)
-        else:
-            self._play_sound_effect("menu_confirm")
     
     def _handle_game_mode_enter(self):
         """Handle Enter key in game mode selection"""
@@ -163,20 +153,9 @@ class InputHandler:
             self.menu_selections[MAIN_MENU] = (self.menu_selections[MAIN_MENU] + 1) % 3
             self._play_sound_effect("menu_select")
     
-    def _handle_options_menu_navigation(self, key):
-        """Handle navigation in options menu"""
-        selection = self.menu_selections[OPTIONS_MENU]
-        
-        if key == GLUT_KEY_UP:
-            self.menu_selections[OPTIONS_MENU] = (selection - 1) % 4
-            self._play_sound_effect("menu_select")
-        elif key == GLUT_KEY_DOWN:
-            self.menu_selections[OPTIONS_MENU] = (selection + 1) % 4
-            self._play_sound_effect("menu_select")
-        elif key == GLUT_KEY_LEFT:
-            self._adjust_option(-1, selection)
-        elif key == GLUT_KEY_RIGHT:
-            self._adjust_option(1, selection)
+    def _handle_highscore_menu_navigation(self, key):
+        """Handle navigation in high score screen (no navigation needed)"""
+        pass  # High score screen doesn't have interactive elements
     
     def _handle_game_mode_navigation(self, key):
         """Handle navigation in game mode selection"""
@@ -186,23 +165,6 @@ class InputHandler:
         elif key == GLUT_KEY_DOWN:
             self.menu_selections[GAME_MODE_SELECTION] = (self.menu_selections[GAME_MODE_SELECTION] + 1) % 2
             self._play_sound_effect("menu_select")
-    
-    def _adjust_option(self, direction, selection):
-        """Adjust option values"""
-        if selection == 0:  # Sound Volume
-            current_volume = game_settings.get_sound_volume()
-            new_volume = max(0, min(100, current_volume + direction * 10))
-            game_settings.set_sound_volume(new_volume)
-        elif selection == 1:  # Text Size
-            current_size = game_settings.get_text_size()
-            new_size = max(0.5, min(2.0, round(current_size + direction * 0.1, 1)))
-            game_settings.set_text_size(new_size)
-        elif selection == 2:  # Difficulty
-            current_difficulty = game_settings.get_difficulty()
-            new_difficulty = (current_difficulty + direction) % 3
-            game_settings.set_difficulty(new_difficulty)
-        
-        self._play_sound_effect("menu_confirm")
     
     def _play_sound_effect(self, effect_type):
         """Placeholder for sound effects"""

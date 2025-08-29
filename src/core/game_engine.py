@@ -6,13 +6,13 @@ Manages game states, initialization, and main loop.
 import time
 from OpenGL.GL import *
 from OpenGL.GLUT import *
-from core.state_manager import StateManager, LOADING_SCREEN, MAIN_MENU, OPTIONS_MENU, GAME_MODE_SELECTION, GAME_3D
+from core.state_manager import StateManager, LOADING_SCREEN, MAIN_MENU, HIGH_SCORE, GAME_MODE_SELECTION, GAME_3D
 from core.opengl_manager import OpenGLManager
 from core.input_handler import InputHandler
 from core.settings import GameSettings
 from screens.loading_screen import LoadingScreen
 from screens.main_menu_screen import MainMenuScreen
-from screens.options_menu_screen import OptionsMenuScreen
+from screens.highscore_screen import HighScoreScreen
 from screens.game_mode_selection_screen import GameModeSelectionScreen
 from screens.game_3d_screen import Game3DScreen
 
@@ -36,7 +36,7 @@ class GameEngine:
             self.state_manager, self.opengl_manager, self.input_handler)
         self.screens[MAIN_MENU] = MainMenuScreen(
             self.state_manager, self.opengl_manager, self.input_handler)
-        self.screens[OPTIONS_MENU] = OptionsMenuScreen(
+        self.screens[HIGH_SCORE] = HighScoreScreen(
             self.state_manager, self.opengl_manager, self.input_handler)
         self.screens[GAME_MODE_SELECTION] = GameModeSelectionScreen(
             self.state_manager, self.opengl_manager, self.input_handler)

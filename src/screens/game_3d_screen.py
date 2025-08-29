@@ -56,6 +56,11 @@ class Game3DScreen(BaseScreen):
         self.game_over_p2 = False
         self.death_y = -20.0  # If ball falls below this, game over
         
+        # Multiplayer VS game state
+        self.game_ended = False  # True when VS game has ended
+        self.winner = 0  # 0 = no winner, 1 = player 1 wins, 2 = player 2 wins
+        self.winner_reason = ""  # Reason for winning
+        
         # Score and timer system
         self.score = 0
         self.platforms_reached = set()  # Track which platforms have been reached
@@ -106,7 +111,13 @@ class Game3DScreen(BaseScreen):
         """Create Fall Guys style platforms with movement"""
         platforms = []
         
-        # Starting platform - static
+        # Determine number of platforms based on mode
+        if self.is_multiplayer:
+            num_platforms = 20
+        else:
+            num_platforms = 30
+        
+        # Starting platform - always static
         platforms.append({
             'x': 0, 'y': 0, 'z': 0,
             'width': 8, 'height': 0.5, 'depth': 8,
@@ -115,50 +126,70 @@ class Game3DScreen(BaseScreen):
             'base_x': 0, 'base_y': 0, 'base_z': 0
         })
         
-        # Platform 2 - moving side to side
-        platforms.append({
-            'x': 0, 'y': 0, 'z': -8,
-            'width': 6, 'height': 0.5, 'depth': 6,
-            'color': (0.8, 0.2, 0.2),  # Red
-            'movement_type': 'horizontal',
-            'base_x': 0, 'base_y': 0, 'base_z': -8,
-            'move_range': 4.0,  # How far it moves
-            'move_speed': 1.5   # Speed of movement
-        })
+        # Generate platforms dynamically
+        colors = [
+            (0.8, 0.2, 0.2),  # Red
+            (0.2, 0.2, 0.8),  # Blue
+            (0.8, 0.8, 0.2),  # Yellow
+            (0.8, 0.2, 0.8),  # Magenta
+            (0.2, 0.8, 0.8),  # Cyan
+            (0.8, 0.5, 0.2),  # Orange
+        ]
         
-        # Platform 3 - tilting platform
-        platforms.append({
-            'x': -3, 'y': 1, 'z': -14,
-            'width': 4, 'height': 0.5, 'depth': 4,
-            'color': (0.2, 0.2, 0.8),  # Blue
-            'movement_type': 'tilt',
-            'base_x': -3, 'base_y': 1, 'base_z': -14,
-            'tilt_angle': 0.0,  # Current tilt angle
-            'tilt_speed': 2.0   # Speed of tilting
-        })
+        movement_types = ['horizontal', 'tilt', 'forward_back', 'rotate_tilt']
         
-        # Platform 4 - moving back and forth (Z direction)
-        platforms.append({
-            'x': 2, 'y': 2, 'z': -20,
-            'width': 5, 'height': 0.5, 'depth': 5,
-            'color': (0.8, 0.8, 0.2),  # Yellow
-            'movement_type': 'forward_back',
-            'base_x': 2, 'base_y': 2, 'base_z': -20,
-            'move_range': 3.0,
-            'move_speed': 1.0
-        })
-        
-        # Platform 5 - rotating tilt (more challenging)
-        platforms.append({
-            'x': 0, 'y': 3, 'z': -26,
-            'width': 6, 'height': 0.5, 'depth': 6,
-            'color': (0.8, 0.2, 0.8),  # Magenta
-            'movement_type': 'rotate_tilt',
-            'base_x': 0, 'base_y': 3, 'base_z': -26,
-            'tilt_x': 0.0,  # Tilt around X axis
-            'tilt_z': 0.0,  # Tilt around Z axis
-            'tilt_speed': 1.5
-        })
+        for i in range(1, num_platforms + 1):
+            # Calculate position (spreading them out more)
+            z_pos = -6 * i  # Increased spacing
+            x_pos = (-1) ** i * (i % 3) * 2  # Alternate sides with some variety
+            y_pos = (i // 3) * 0.5  # Gradual height increase
+            
+            # Choose movement type (cycle through types)
+            movement_type = movement_types[(i - 1) % len(movement_types)]
+            
+            # Choose color (cycle through colors)
+            color = colors[(i - 1) % len(colors)]
+            
+            # Vary platform size based on difficulty
+            if i <= 5:
+                width, depth = 6, 6  # Larger platforms early on
+            elif i <= 15:
+                width, depth = 5, 5  # Medium platforms
+            else:
+                width, depth = 4, 4  # Smaller platforms for end game
+            
+            platform = {
+                'x': x_pos, 'y': y_pos, 'z': z_pos,
+                'width': width, 'height': 0.5, 'depth': depth,
+                'color': color,
+                'movement_type': movement_type,
+                'base_x': x_pos, 'base_y': y_pos, 'base_z': z_pos
+            }
+            
+            # Add movement-specific properties
+            if movement_type == 'horizontal':
+                platform.update({
+                    'move_range': 3.0 + (i * 0.1),  # Increase range with level
+                    'move_speed': 1.0 + (i * 0.05)   # Increase speed with level
+                })
+            elif movement_type == 'tilt':
+                platform.update({
+                    'tilt_angle': 0.0,
+                    'tilt_speed': 1.5 + (i * 0.05)
+                })
+            elif movement_type == 'forward_back':
+                platform.update({
+                    'move_range': 2.5 + (i * 0.08),
+                    'move_speed': 0.8 + (i * 0.04)
+                })
+            elif movement_type == 'rotate_tilt':
+                platform.update({
+                    'tilt_x': 0.0,
+                    'tilt_z': 0.0,
+                    'tilt_speed': 1.2 + (i * 0.03)
+                })
+            
+            platforms.append(platform)
         
         return platforms
         
@@ -217,6 +248,9 @@ class Game3DScreen(BaseScreen):
         self._update_camera_for_player(2)
         self._render_scene_for_player(2)
         self._render_ui_for_player(2, window_width - half_width, window_height)
+        
+        # Render the divider line between the two viewports
+        self._render_multiplayer_divider(window_width, window_height)
         
     def _update_game(self, dt):
         """Update game physics and logic"""
@@ -292,6 +326,10 @@ class Game3DScreen(BaseScreen):
         
     def _handle_input(self, dt):
         """Handle player input with acceleration"""
+        # Don't handle input if VS game has ended
+        if self.is_multiplayer and self.game_ended:
+            return
+            
         # Movement forces using acceleration
         if self.keys_pressed['w']:
             self.ball_vel_z -= self.acceleration * dt
@@ -317,6 +355,11 @@ class Game3DScreen(BaseScreen):
         """Handle Player 2 input with acceleration"""
         if not self.is_multiplayer:
             return
+        
+        # Don't handle input if VS game has ended
+        if self.game_ended:
+            return
+            
         if self.keys_pressed_p2['up']:
             self.ball2_vel_z -= self.acceleration * dt
         if self.keys_pressed_p2['down']:
@@ -337,7 +380,7 @@ class Game3DScreen(BaseScreen):
             
     def _update_physics(self, dt):
         """Update ball physics with enhanced properties"""
-        if self.game_over:
+        if self.game_over or (self.is_multiplayer and self.game_ended):
             return
             
         # Update game timer
@@ -387,10 +430,14 @@ class Game3DScreen(BaseScreen):
                 self.high_score = self.score
                 print(f"New High Score: {self.high_score}!")
             print("Game Over! Ball fell off the platforms!")
+            
+            # In multiplayer VS mode, determine winner when a player falls
+            if self.is_multiplayer and not self.game_ended:
+                self._determine_vs_winner(1)  # Player 1 fell
 
     def _update_physics_p2(self, dt):
         """Update Player 2 physics"""
-        if not self.is_multiplayer or self.game_over_p2:
+        if not self.is_multiplayer or self.game_over_p2 or self.game_ended:
             return
         
         self.game_time = time.time() - self.start_time
@@ -422,6 +469,48 @@ class Game3DScreen(BaseScreen):
                 self.high_score_p2 = self.score_p2
                 print(f"P2 New High Score: {self.high_score_p2}!")
             print("P2 Game Over! Ball fell off the platforms!")
+            
+            # In multiplayer VS mode, determine winner when a player falls
+            if self.is_multiplayer and not self.game_ended:
+                self._determine_vs_winner(2)  # Player 2 fell
+    
+    def _determine_vs_winner(self, falling_player):
+        """Determine winner in VS mode when a player falls"""
+        if self.game_ended:
+            return
+            
+        self.game_ended = True
+        self.game_over = True
+        self.game_over_p1 = True
+        self.game_over_p2 = True
+        
+        # Get scores
+        p1_score = self.score
+        p2_score = self.score_p2
+        score_diff = abs(p1_score - p2_score)
+        
+        if falling_player == 1:
+            # Player 1 fell
+            if p1_score > p2_score and score_diff > 100:
+                # Falling player wins if they have more than 100 point lead
+                self.winner = 1
+                self.winner_reason = f"P1 WINS! Fell with {score_diff} point lead!"
+            else:
+                # Remaining player wins
+                self.winner = 2
+                self.winner_reason = f"P2 WINS! P1 fell (score diff: {score_diff})"
+        else:
+            # Player 2 fell
+            if p2_score > p1_score and score_diff > 100:
+                # Falling player wins if they have more than 100 point lead
+                self.winner = 2
+                self.winner_reason = f"P2 WINS! Fell with {score_diff} point lead!"
+            else:
+                # Remaining player wins
+                self.winner = 1
+                self.winner_reason = f"P1 WINS! P2 fell (score diff: {score_diff})"
+        
+        print(self.winner_reason)
             
     def _handle_platform_collision(self):
         """Handle collision with platforms with bounce physics"""
@@ -865,14 +954,14 @@ class Game3DScreen(BaseScreen):
         window_height = glutGet(GLUT_WINDOW_HEIGHT)
         
         if self.game_over:
-            # Game Over screen
-            glColor3f(1.0, 0.0, 0.0)  # Red
+            # Game Over screen with eye-catching colors
+            glColor3f(1.0, 0.2, 0.2)  # Bright red with slight orange tint
             game_over_text = "GAME OVER!"
             glRasterPos2f(window_width//2 - 50, window_height//2)
             for char in game_over_text:
                 glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, ord(char))
                 
-            glColor3f(1.0, 1.0, 1.0)  # White
+            glColor3f(1.0, 1.0, 0.0)  # Bright yellow for instructions
             restart_text = "Press R to restart, ESC to quit"
             glRasterPos2f(window_width//2 - 100, window_height//2 - 30)
             for char in restart_text:
@@ -925,11 +1014,33 @@ class Game3DScreen(BaseScreen):
             controls = "P2: Arrows move, ENTER jump"
         
         if over:
-            glColor3f(1.0, 0.0, 0.0)
-            text = "GAME OVER"
-            glRasterPos2f(vp_width//2 - 50, vp_height//2)
-            for ch in text:
-                glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, ord(ch))
+            # In multiplayer VS mode, show winner information
+            if self.is_multiplayer and self.game_ended and self.winner > 0:
+                if self.winner == player_index:
+                    glColor3f(0.0, 1.0, 0.3)  # Bright green with slight cyan tint for winner
+                    text = "YOU WIN!"
+                else:
+                    glColor3f(1.0, 0.2, 0.4)  # Bright red-pink for loser
+                    text = "YOU LOSE"
+                
+                glRasterPos2f(vp_width//2 - 50, vp_height//2 - 30)
+                for ch in text:
+                    glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, ord(ch))
+                
+                # Show winner reason with bright yellow
+                glColor3f(1.0, 1.0, 0.2)  # Bright yellow for reason text
+                reason_lines = self.winner_reason.split('!')
+                for i, line in enumerate(reason_lines):
+                    if line.strip():
+                        glRasterPos2f(vp_width//2 - 80, vp_height//2 + 10 + i * 20)
+                        for ch in line.strip():
+                            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, ord(ch))
+            else:
+                glColor3f(1.0, 0.2, 0.2)  # Bright red with orange tint
+                text = "GAME OVER"
+                glRasterPos2f(vp_width//2 - 50, vp_height//2)
+                for ch in text:
+                    glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, ord(ch))
         else:
             glColor3f(1.0, 1.0, 0.0)
             s = f"SCORE: {score}"
@@ -951,6 +1062,80 @@ class Game3DScreen(BaseScreen):
             for ch in vel:
                 glutBitmapCharacter(GLUT_BITMAP_HELVETICA_10, ord(ch))
         
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_LIGHTING)
+    
+    def _render_multiplayer_divider(self, window_width, window_height):
+        """Render a visible divider line between the two player viewports"""
+        # Set up 2D rendering for the full screen
+        glViewport(0, 0, window_width, window_height)
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        glOrtho(0, window_width, window_height, 0, -1, 1)
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+        
+        # Disable lighting and depth testing for 2D overlay
+        glDisable(GL_LIGHTING)
+        glDisable(GL_DEPTH_TEST)
+        
+        # Enable blending for semi-transparent effects
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        
+        # Calculate divider position (middle of screen)
+        divider_x = window_width // 2
+        divider_width = 4  # Width of the divider line
+        
+        # Draw the main divider line (bright white/yellow)
+        glColor4f(1.0, 1.0, 0.8, 0.9)  # Light yellow with high opacity
+        glBegin(GL_QUADS)
+        glVertex2f(divider_x - divider_width//2, 0)
+        glVertex2f(divider_x + divider_width//2, 0)
+        glVertex2f(divider_x + divider_width//2, window_height)
+        glVertex2f(divider_x - divider_width//2, window_height)
+        glEnd()
+        
+        # Draw subtle shadow/border on both sides for better visibility
+        shadow_width = 1
+        glColor4f(0.0, 0.0, 0.0, 0.4)  # Dark shadow
+        
+        # Left shadow
+        glBegin(GL_QUADS)
+        glVertex2f(divider_x - divider_width//2 - shadow_width, 0)
+        glVertex2f(divider_x - divider_width//2, 0)
+        glVertex2f(divider_x - divider_width//2, window_height)
+        glVertex2f(divider_x - divider_width//2 - shadow_width, window_height)
+        glEnd()
+        
+        # Right shadow
+        glBegin(GL_QUADS)
+        glVertex2f(divider_x + divider_width//2, 0)
+        glVertex2f(divider_x + divider_width//2 + shadow_width, 0)
+        glVertex2f(divider_x + divider_width//2 + shadow_width, window_height)
+        glVertex2f(divider_x + divider_width//2, window_height)
+        glEnd()
+        
+        # Add "VS" text in the middle for a game-like feel
+        text = "VS"
+        text_y = window_height // 2 - 10
+        text_x = divider_x - 10  # Center the text
+        
+        glColor4f(0.0, 0.0, 0.0, 0.8)  # Dark background for text
+        glBegin(GL_QUADS)
+        glVertex2f(text_x - 15, text_y - 8)
+        glVertex2f(text_x + 15, text_y - 8)
+        glVertex2f(text_x + 15, text_y + 12)
+        glVertex2f(text_x - 15, text_y + 12)
+        glEnd()
+        
+        glColor3f(1.0, 1.0, 1.0)  # White text
+        glRasterPos2f(text_x, text_y)
+        for char in text:
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+        
+        # Restore OpenGL state
+        glDisable(GL_BLEND)
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_LIGHTING)
             
@@ -1018,6 +1203,12 @@ class Game3DScreen(BaseScreen):
         self.game_over = False
         self.game_over_p1 = False
         self.game_over_p2 = False
+        
+        # Reset VS game state
+        self.game_ended = False
+        self.winner = 0
+        self.winner_reason = ""
+        
         # Reset score and timer
         self.score = 0
         self.platforms_reached = set()
@@ -1047,12 +1238,15 @@ class Game3DScreen(BaseScreen):
         
     def on_screen_enter(self):
         """Called when this screen becomes active"""
+        print("Game3D screen entered")
         # Sync mode with current selection and reset when coming in
         self.is_multiplayer = (game_settings.get_game_mode() == 1)
         if self.game_over:
+            print("Game was over, resetting state...")
             self.reset_game_state()
             
     def on_screen_exit(self):
         """Called when leaving this screen"""
+        print("Game3D screen exiting")
         # Mark that we'll need to reset when we come back
         self._screen_just_entered = True

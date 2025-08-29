@@ -36,7 +36,7 @@ class MainMenuScreen(BaseScreen):
             glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, ord(char))
         
         # Menu items
-        menu_items = ["Start Game", "Options", "Quit"]
+        menu_items = ["Start Game", "High Score", "Quit"]
         item_spacing = 60
         start_y = center_y - 30
         
