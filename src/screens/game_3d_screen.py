@@ -958,8 +958,9 @@ class Game3DScreen(BaseScreen):
         """Handle key press events"""
         key = key.lower()
         
-        # Handle restart
-        if key == 'r' and self.game_over:
+        # Handle restart (single or two player)
+        is_any_game_over = self.game_over or (self.is_multiplayer and (self.game_over_p1 or self.game_over_p2))
+        if key == 'r' and is_any_game_over:
             self._restart_game()
             return
             
@@ -1015,11 +1016,29 @@ class Game3DScreen(BaseScreen):
         self.ball_vel_y = 0.0
         self.ball_vel_z = 0.0
         self.game_over = False
+        self.game_over_p1 = False
+        self.game_over_p2 = False
         # Reset score and timer
         self.score = 0
         self.platforms_reached = set()
         self.start_time = time.time()
         self.game_time = 0.0
+        
+        # Reset Player 2 state when in multiplayer
+        self.ball2_x = 0.0
+        self.ball2_y = 1.0
+        self.ball2_z = 0.0
+        self.ball2_vel_x = 0.0
+        self.ball2_vel_y = 0.0
+        self.ball2_vel_z = 0.0
+        self.score_p2 = 0
+        self.platforms_reached_p2 = set()
+        
+        # Clear pressed keys
+        for k in list(self.keys_pressed.keys()):
+            self.keys_pressed[k] = False
+        for k in list(self.keys_pressed_p2.keys()):
+            self.keys_pressed_p2[k] = False
         print("Game restarted!")
         
     def reset_game_state(self):
